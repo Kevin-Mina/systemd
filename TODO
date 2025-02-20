@@ -116,6 +116,8 @@ Deprecations and removals:
 * drop fd_is_mount_point() fallback mess once we can rely on
   STATX_ATTR_MOUNT_ROOT to exist i.e. kernel baseline 5.8
 
+* Once baseline is 5.10, remove support or MS_NOSYMFOLLOW-less kernels
+
 * Remove /dev/mem ACPI FPDT parsing when /sys/firmware/acpi/fpdt is ubiquitous.
   That requires distros to enable CONFIG_ACPI_FPDT, and have kernels v5.12 for
   x86 and v6.2 for arm.
@@ -124,6 +126,20 @@ Deprecations and removals:
   trigger"'s waiting logic, since we can then rely on uuid-tagged uevents
 
 Features:
+
+* repart: introduce concept of "ghost" partitions, that we setup in almost all
+  ways like other partitions, but do not actually register in the actual gpt
+  table, but only tell the kernel about via BLKPG ioctl. These partitions are
+  disk backed (hence can be large), but not persistent (as they are invisible
+  on next boot). Could be used by live media and similar, to boot up as usual
+  but automatically start at zero on each boot. There should also be a way to
+  make ghost partitions properly persistent on request.
+
+* repart: introduce MigrateFileSystem= or so which is a bit like
+  CopyFiles=/CopyBlocks= but operates via btrfs device logic: adds target as
+  new device then removes source from btrfs. Usecase: a live medium which uses
+  "ghost" partitions as suggested above, which can become persistent on request
+  on another device.
 
 * make nspawn containers, portable services and vmspawn VMs optionally survive
   soft reboot wholesale.
@@ -2554,7 +2570,7 @@ Features:
   - permit multiple user record signing keys to be used locally, and pick
     the right one for signing records automatically depending on a pre-existing
     signature
-  - add a way to "adopt" a home directory, i.e. strip foreign signatures
+  - add a way to "take possession" of a home directory, i.e. strip foreign signatures
     and insert a local signature instead.
   - as an extension to the directory+subvolume backend: if located on
     especially marked fs, then sync down password into LUKS header of that fs,

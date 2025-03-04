@@ -17,6 +17,7 @@
 #include "iovec-util.h"
 #include "json-util.h"
 #include "list.h"
+#include "mkdir.h"
 #include "path-util.h"
 #include "process-util.h"
 #include "set.h"
@@ -3183,6 +3184,15 @@ _public_ int sd_varlink_take_fd(sd_varlink *v, size_t i) {
         return TAKE_FD(v->input_fds[i]);
 }
 
+_public_ int sd_varlink_get_n_fds(sd_varlink *v) {
+        assert_return(v, -EINVAL);
+
+        if (!v->allow_fd_passing_input)
+                return -EPERM;
+
+        return (int) v->n_input_fds;
+}
+
 static int verify_unix_socket(sd_varlink *v) {
         assert(v);
 
@@ -3634,7 +3644,18 @@ _public_ int sd_varlink_server_listen_address(sd_varlink_server *s, const char *
 
         assert_return(s, -EINVAL);
         assert_return(address, -EINVAL);
-        assert_return((m & ~0777) == 0, -EINVAL);
+        assert_return((m & ~(0777|SD_VARLINK_SERVER_MODE_MKDIR_0755)) == 0, -EINVAL);
+
+        /* Validate that the definition of our flag doesn't collide with the official mode_t bits. Thankfully
+         * the bit values of mode_t flags are fairly well established (POSIX and all), hence we should be
+         * safe here. */
+        assert_cc(((S_IFMT|07777) & SD_VARLINK_SERVER_MODE_MKDIR_0755) == 0);
+
+        if (FLAGS_SET(m, SD_VARLINK_SERVER_MODE_MKDIR_0755) && path_is_absolute(address)) {
+                r = mkdir_parents(address, 0755);
+                if (r < 0)
+                        return r;
+        }
 
         r = sockaddr_un_set_path(&sockaddr.un, address);
         if (r < 0)

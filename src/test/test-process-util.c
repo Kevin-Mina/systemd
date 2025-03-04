@@ -659,6 +659,24 @@ TEST(safe_fork) {
         ASSERT_OK(wait_for_terminate(pid, &status));
         ASSERT_EQ(status.si_code, CLD_EXITED);
         ASSERT_EQ(status.si_status, 88);
+
+        _cleanup_(pidref_done) PidRef child = PIDREF_NULL;
+        r = pidref_safe_fork("(test-child)", FORK_DETACH, &child);
+        if (r == 0) {
+                /* Don't freeze so this doesn't linger around forever in case something goes wrong. */
+                usleep_safe(100 * USEC_PER_SEC);
+                _exit(EXIT_SUCCESS);
+        }
+
+        ASSERT_OK_POSITIVE(r);
+        ASSERT_GT(child.pid, 0);
+        ASSERT_OK(pidref_get_ppid(&child, &pid));
+        ASSERT_OK(pidref_kill(&child, SIGKILL));
+
+        if (is_reaper_process())
+                ASSERT_EQ(pid, getpid_cached());
+        else
+                ASSERT_NE(pid, getpid_cached());
 }
 
 TEST(pid_to_ptr) {
@@ -703,7 +721,7 @@ TEST(ioprio_class_from_to_string) {
         test_ioprio_class_from_to_string_one("0", IOPRIO_CLASS_NONE, IOPRIO_CLASS_BE);
         test_ioprio_class_from_to_string_one("1", 1, 1);
         test_ioprio_class_from_to_string_one("7", 7, 7);
-        test_ioprio_class_from_to_string_one("8", 8, 8);
+        test_ioprio_class_from_to_string_one("8", -EINVAL, -EINVAL);
         test_ioprio_class_from_to_string_one("9", -EINVAL, -EINVAL);
         test_ioprio_class_from_to_string_one("-1", -EINVAL, -EINVAL);
 }

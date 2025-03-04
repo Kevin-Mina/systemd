@@ -36,12 +36,13 @@ or via your distribution's package manager. Note that systemd regularly adopts
 newer mkosi features that are not in an official release yet so there's a good
 chance that your distribution's packaged version of mkosi will be too old.
 
-Then, you can build and run systemd executables as follows:
+Then, you can build, run and test systemd executables as follows:
 
 ```sh
 $ mkosi -f sandbox -- meson setup build
 $ mkosi -f sandbox -- meson compile -C build
 $ mkosi -f sandbox -- build/systemctl --version
+$ mkosi -f sandbox -- meson test -C build          # Run the unit tests
 ```
 
 To build and boot an OS image with the latest systemd installed:
@@ -101,10 +102,10 @@ the following commands in another terminal on your host after booting the image
 machine):
 
 ```sh
-mkosi -t none && mkosi ssh -- dnf upgrade --disablerepo="*" --assumeyes "/work/build/*.rpm"             # CentOS/Fedora
-mkosi -t none && mkosi ssh -- apt-get install "/work/build/*.deb"                                       # Debian/Ubuntu
-mkosi -t none && mkosi ssh -- pacman --upgrade --needed --noconfirm "/work/build/*.pkg.tar"             # Arch Linux
-mkosi -t none && mkosi ssh -- zypper --non-interactive install --allow-unsigned-rpm "/work/build/*.rpm" # OpenSUSE
+mkosi -R && mkosi ssh -- dnf upgrade --disablerepo="*" --assumeyes "/work/build/*.rpm"             # CentOS/Fedora
+mkosi -R && mkosi ssh -- apt-get install "/work/build/*.deb"                                       # Debian/Ubuntu
+mkosi -R && mkosi ssh -- pacman --upgrade --needed --noconfirm "/work/build/*.pkg.tar"             # Arch Linux
+mkosi -R && mkosi ssh -- zypper --non-interactive install --allow-unsigned-rpm "/work/build/*.rpm" # OpenSUSE
 ```
 
 and optionally restart the daemon(s) you're working on using
@@ -117,7 +118,7 @@ To build distribution packages for a specific distribution and release without
 building an actual image, the following command can be used:
 
 ```sh
-mkosi -d <distribution> -r <release> -t none
+mkosi -d <distribution> -r <release> -t none -f
 ```
 
 Afterwards the distribution packages will be located in
@@ -125,7 +126,7 @@ Afterwards the distribution packages will be located in
 debuginfo packages, the following command can be used:
 
 ```sh
-mkosi -d <distribution> -r <release> -E WITH_DEBUG=1 -t none
+mkosi -d <distribution> -r <release> -E WITH_DEBUG=1 -t none -f
 ```
 
 To upgrade the systemd packages on the host system to the newer versions built

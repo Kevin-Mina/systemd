@@ -6,13 +6,13 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <sys/xattr.h>
+#include <threads.h>
 
 #include "alloc-util.h"
 #include "errno-util.h"
 #include "fd-util.h"
 #include "macro.h"
 #include "missing_syscall.h"
-#include "missing_threads.h"
 #include "parse-util.h"
 #include "sparse-endian.h"
 #include "stat-util.h"
@@ -379,7 +379,7 @@ int getcrtime_at(
                 usec_t *ret) {
 
         _cleanup_free_ le64_t *le = NULL;
-        STRUCT_STATX_DEFINE(sx);
+        struct statx sx;
         usec_t a, b;
         int r;
 

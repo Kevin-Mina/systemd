@@ -419,7 +419,10 @@ int ask_string_full(
                         /* Ctrl-u → erase all input */
 
                         clear_by_backspace(utf8_console_width(string));
-                        string[n = 0] = 0;
+                        if (string)
+                                string[n = 0] = 0;
+                        else
+                                assert(n == 0);
 
                 } else if (c == 4) {
                         /* Ctrl-d → cancel this field input */
@@ -640,7 +643,10 @@ int acquire_terminal(
         int r, wd = -1;
 
         assert(name);
-        assert(IN_SET(flags & ~ACQUIRE_TERMINAL_PERMISSIVE, ACQUIRE_TERMINAL_TRY, ACQUIRE_TERMINAL_FORCE, ACQUIRE_TERMINAL_WAIT));
+
+        AcquireTerminalFlags mode = flags & _ACQUIRE_TERMINAL_MODE_MASK;
+        assert(IN_SET(mode, ACQUIRE_TERMINAL_TRY, ACQUIRE_TERMINAL_FORCE, ACQUIRE_TERMINAL_WAIT));
+        assert(mode == ACQUIRE_TERMINAL_WAIT || !FLAGS_SET(flags, ACQUIRE_TERMINAL_WATCH_SIGTERM));
 
         /* We use inotify to be notified when the tty is closed. We create the watch before checking if we can actually
          * acquire it, so that we don't lose any event.
@@ -651,8 +657,8 @@ int acquire_terminal(
          * not configure any service on the same tty as an untrusted user this should not be a problem. (Which they
          * probably should not do anyway.) */
 
-        if ((flags & ~ACQUIRE_TERMINAL_PERMISSIVE) == ACQUIRE_TERMINAL_WAIT) {
-                notify = inotify_init1(IN_CLOEXEC | (timeout != USEC_INFINITY ? IN_NONBLOCK : 0));
+        if (mode == ACQUIRE_TERMINAL_WAIT) {
+                notify = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
                 if (notify < 0)
                         return -errno;
 
@@ -662,6 +668,14 @@ int acquire_terminal(
 
                 if (timeout != USEC_INFINITY)
                         ts = now(CLOCK_MONOTONIC);
+        }
+
+        /* If we are called with ACQUIRE_TERMINAL_WATCH_SIGTERM we'll unblock SIGTERM during ppoll() temporarily */
+        sigset_t poll_ss;
+        assert_se(sigprocmask(SIG_SETMASK, /* newset= */ NULL, &poll_ss) >= 0);
+        if (flags & ACQUIRE_TERMINAL_WATCH_SIGTERM) {
+                assert_se(sigismember(&poll_ss, SIGTERM) > 0);
+                assert_se(sigdelset(&poll_ss, SIGTERM) >= 0);
         }
 
         for (;;) {
@@ -682,7 +696,7 @@ int acquire_terminal(
                 assert_se(sigaction(SIGHUP, &sigaction_ignore, &sa_old) >= 0);
 
                 /* First, try to get the tty */
-                r = RET_NERRNO(ioctl(fd, TIOCSCTTY, (flags & ~ACQUIRE_TERMINAL_PERMISSIVE) == ACQUIRE_TERMINAL_FORCE));
+                r = RET_NERRNO(ioctl(fd, TIOCSCTTY, mode == ACQUIRE_TERMINAL_FORCE));
 
                 /* Reset signal handler to old value */
                 assert_se(sigaction(SIGHUP, &sa_old, NULL) >= 0);
@@ -700,32 +714,41 @@ int acquire_terminal(
                                                           * already are the owner of the TTY. */
                         break;
 
-                if (flags != ACQUIRE_TERMINAL_WAIT) /* If we are in TRY or FORCE mode, then propagate EPERM as EPERM */
+                if (mode != ACQUIRE_TERMINAL_WAIT) /* If we are in TRY or FORCE mode, then propagate EPERM as EPERM */
                         return r;
 
                 assert(notify >= 0);
                 assert(wd >= 0);
 
                 for (;;) {
-                        union inotify_event_buffer buffer;
-                        ssize_t l;
-
-                        if (timeout != USEC_INFINITY) {
-                                usec_t n;
-
+                        usec_t left;
+                        if (timeout == USEC_INFINITY)
+                                left = USEC_INFINITY;
+                        else {
                                 assert(ts != USEC_INFINITY);
 
-                                n = usec_sub_unsigned(now(CLOCK_MONOTONIC), ts);
+                                usec_t n = usec_sub_unsigned(now(CLOCK_MONOTONIC), ts);
                                 if (n >= timeout)
                                         return -ETIMEDOUT;
 
-                                r = fd_wait_for_event(notify, POLLIN, usec_sub_unsigned(timeout, n));
-                                if (r < 0)
-                                        return r;
-                                if (r == 0)
-                                        return -ETIMEDOUT;
+                                left = timeout - n;
                         }
 
+                        r = ppoll_usec_full(
+                                        &(struct pollfd) {
+                                                .fd = notify,
+                                                .events = POLLIN,
+                                        },
+                                        /* n_pollfds = */ 1,
+                                        left,
+                                        &poll_ss);
+                        if (r < 0)
+                                return r;
+                        if (r == 0)
+                                return -ETIMEDOUT;
+
+                        union inotify_event_buffer buffer;
+                        ssize_t l;
                         l = read(notify, &buffer, sizeof(buffer));
                         if (l < 0) {
                                 if (ERRNO_IS_TRANSIENT(errno))
@@ -1927,38 +1950,35 @@ int terminal_set_cursor_position(int fd, unsigned row, unsigned column) {
         return loop_write(fd, cursor_position, SIZE_MAX);
 }
 
-int terminal_reset_defensive(int fd, bool switch_to_text) {
+int terminal_reset_defensive(int fd, TerminalResetFlags flags) {
         int r = 0;
 
         assert(fd >= 0);
+        assert(!FLAGS_SET(flags, TERMINAL_RESET_AVOID_ANSI_SEQ|TERMINAL_RESET_FORCE_ANSI_SEQ));
 
-        /* Resets the terminal comprehensively, but defensively. i.e. both resets the tty via ioctl()s and
-         * via ANSI sequences, but avoids the latter in case we are talking to a pty. That's a safety measure
-         * because ptys might be connected to shell pipelines where we cannot expect such ansi sequences to
-         * work. Given that ptys are generally short-lived (and not recycled) this restriction shouldn't hurt
-         * much.
-         *
-         * The specified fd should be open for *writing*! */
+        /* Resets the terminal comprehensively, i.e. via both ioctl()s and via ANSI sequences, but do so only
+         * if $TERM is unset or set to "dumb" */
 
         if (!isatty_safe(fd))
                 return -ENOTTY;
 
-        RET_GATHER(r, terminal_reset_ioctl(fd, switch_to_text));
+        RET_GATHER(r, terminal_reset_ioctl(fd, FLAGS_SET(flags, TERMINAL_RESET_SWITCH_TO_TEXT)));
 
-        if (terminal_is_pty_fd(fd) == 0)
+        if (!FLAGS_SET(flags, TERMINAL_RESET_AVOID_ANSI_SEQ) &&
+            (FLAGS_SET(flags, TERMINAL_RESET_FORCE_ANSI_SEQ) || !getenv_terminal_is_dumb()))
                 RET_GATHER(r, terminal_reset_ansi_seq(fd));
 
         return r;
 }
 
-int terminal_reset_defensive_locked(int fd, bool switch_to_text) {
+int terminal_reset_defensive_locked(int fd, TerminalResetFlags flags) {
         assert(fd >= 0);
 
         _cleanup_close_ int lock_fd = lock_dev_console();
         if (lock_fd < 0)
                 log_debug_errno(lock_fd, "Failed to acquire lock for /dev/console, ignoring: %m");
 
-        return terminal_reset_defensive(fd, switch_to_text);
+        return terminal_reset_defensive(fd, flags);
 }
 
 void termios_disable_echo(struct termios *termios) {

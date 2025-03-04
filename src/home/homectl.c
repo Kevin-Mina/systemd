@@ -1119,7 +1119,7 @@ static int acquire_new_home_record(sd_json_variant *input, UserRecord **ret) {
         assert(ret);
 
         if (arg_identity) {
-                unsigned line, column;
+                unsigned line = 0, column = 0;
 
                 if (input)
                         return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Two identity records specified, refusing.");
@@ -1599,7 +1599,7 @@ static int acquire_updated_home_record(
         assert(ret);
 
         if (arg_identity) {
-                unsigned line, column;
+                unsigned line = 0, column = 0;
                 sd_json_variant *un;
 
                 r = sd_json_parse_file(
@@ -2515,7 +2515,7 @@ static int create_interactively(void) {
                 return 0;
         }
 
-        (void) terminal_reset_defensive_locked(STDOUT_FILENO, /* switch_to_text= */ false);
+        (void) terminal_reset_defensive_locked(STDOUT_FILENO, /* flags= */ 0);
 
         for (;;) {
                 username = mfree(username);

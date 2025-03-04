@@ -32,7 +32,6 @@
 #include "list.h"
 #include "main-func.h"
 #include "memory-util.h"
-#include "missing_capability.h"
 #include "path-util.h"
 #include "selinux-util.h"
 #include "service-util.h"
@@ -889,6 +888,10 @@ static int method_set_time(sd_bus_message *m, void *userdata, sd_bus_error *erro
                 timespec_store(&ts, n);
         } else
                 timespec_store(&ts, (usec_t) utc);
+
+        /* refuse the request when the time is before systemd build date time*/
+        if (ts.tv_sec < TIME_EPOCH)
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Requested to set the clock to time before build time, refusing.");
 
         r = bus_verify_polkit_async_full(
                         m,

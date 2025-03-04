@@ -10,7 +10,6 @@
 #include "fs-util.h"
 #include "libmount-util.h"
 #include "missing_magic.h"
-#include "missing_mount.h"
 #include "mkdir.h"
 #include "mount-util.h"
 #include "mountpoint-util.h"
@@ -266,9 +265,9 @@ TEST(make_mount_point_inode) {
         assert_se(rmdir(dst_dir) == 0);
 
         assert_se(stat(src_file, &st) == 0);
-        assert_se(make_mount_point_inode_from_stat(&st, dst_file, 0755) >= 0);
+        assert_se(make_mount_point_inode_from_mode(AT_FDCWD, dst_file, st.st_mode, 0755) >= 0);
         assert_se(stat(src_dir, &st) == 0);
-        assert_se(make_mount_point_inode_from_stat(&st, dst_dir, 0755) >= 0);
+        assert_se(make_mount_point_inode_from_mode(AT_FDCWD, dst_dir, st.st_mode, 0755) >= 0);
 
         assert_se(stat(dst_dir, &st) == 0);
         assert_se(S_ISDIR(st.st_mode));

@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
+#include <linux/capability.h>
+
 #include "alloc-util.h"
 #include "bus-internal.h"
 #include "bus-introspect.h"
@@ -8,7 +10,6 @@
 #include "bus-signature.h"
 #include "bus-slot.h"
 #include "bus-type.h"
-#include "missing_capability.h"
 #include "string-util.h"
 #include "strv.h"
 
@@ -126,6 +127,8 @@ static int add_enumerated_to_set(
                         return r;
                 if (sd_bus_error_is_set(error))
                         return -sd_bus_error_get_errno(error);
+
+                strv_sort(children);
 
                 STRV_FOREACH(k, children) {
                         if (r < 0) {

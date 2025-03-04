@@ -11,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <sys/un.h>
+#include <threads.h>
 #include <unistd.h>
 
 #include "sd-messages.h"
@@ -26,7 +27,6 @@
 #include "log.h"
 #include "macro.h"
 #include "missing_syscall.h"
-#include "missing_threads.h"
 #include "parse-util.h"
 #include "proc-cmdline.h"
 #include "process-util.h"
@@ -50,7 +50,7 @@ static void *log_syntax_callback_userdata = NULL;
 
 static LogTarget log_target = LOG_TARGET_CONSOLE;
 static int log_max_level = LOG_INFO;
-static int log_target_max_level[] = {
+static int log_target_max_level[_LOG_TARGET_SINGLE_MAX] = {
         [LOG_TARGET_CONSOLE] = INT_MAX,
         [LOG_TARGET_KMSG]    = INT_MAX,
         [LOG_TARGET_SYSLOG]  = INT_MAX,

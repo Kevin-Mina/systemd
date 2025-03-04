@@ -8,7 +8,7 @@
 #include "sd-json.h"
 
 #include "hashmap.h"
-#include "missing_resource.h"
+#include "rlimit-util.h"
 #include "strv.h"
 #include "time-util.h"
 #include "user-util.h"
@@ -532,7 +532,7 @@ static inline void userdb_match_done(UserDBMatch *match) {
 }
 
 bool user_name_fuzzy_match(const char *names[], size_t n_names, char **matches);
-int user_record_match(UserRecord *u, const UserDBMatch *match);
+bool user_record_match(UserRecord *u, const UserDBMatch *match);
 
 bool user_record_matches_user_name(const UserRecord *u, const char *username);
 

@@ -195,6 +195,7 @@ int sd_varlink_reset_fds(sd_varlink *v);
 int sd_varlink_peek_fd(sd_varlink *v, size_t i);
 int sd_varlink_peek_dup_fd(sd_varlink *v, size_t i);
 int sd_varlink_take_fd(sd_varlink *v, size_t i);
+int sd_varlink_get_n_fds(sd_varlink *v);
 
 int sd_varlink_set_allow_fd_passing_input(sd_varlink *v, int b);
 int sd_varlink_set_allow_fd_passing_output(sd_varlink *v, int b);
@@ -231,6 +232,10 @@ int sd_varlink_server_set_info(
                 const char *product,
                 const char *version,
                 const char *url);
+
+/* OR this into sd_varlink_server_listen_address()'s mode paramater to get the leading directories created
+ * automatically with mode 0755. */
+#define SD_VARLINK_SERVER_MODE_MKDIR_0755 ((mode_t) 1 << 30)
 
 /* Add addresses or fds to listen on */
 int sd_varlink_server_listen_address(sd_varlink_server *s, const char *address, mode_t mode);

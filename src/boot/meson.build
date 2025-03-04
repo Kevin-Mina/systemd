@@ -300,12 +300,14 @@ libefi_sources = files(
         'shim.c',
         'smbios.c',
         'ticks.c',
+        'url-discovery.c',
         'util.c',
         'vmm.c',
 )
 
 systemd_boot_sources = files(
         'boot.c',
+        'line-edit.c',
 )
 
 stub_sources = files(

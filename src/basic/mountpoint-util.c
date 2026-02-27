@@ -391,8 +391,7 @@ bool fstype_is_api_vfs(const char *fstype) {
         /* Filesystems not present in the internal database */
         return STR_IN_SET(fstype,
                           "autofs",
-                          "cpuset",
-                          "devtmpfs");
+                          "cpuset");
 }
 
 bool fstype_is_blockdev_backed(const char *fstype) {
